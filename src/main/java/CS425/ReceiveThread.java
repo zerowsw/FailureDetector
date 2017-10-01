@@ -2,24 +2,44 @@ package CS425;
 
 
 import java.util.logging.Logger;
-import java.io.IOException;
-import java.io.InterruptedIOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.io.IOException;
 
-/*** This class is used to listening to the message from other nodes.
+/*** This class is used to receive the message from other nodes.
  *
  */
 
-public class ListeningThread extends Thread{
+public class ReceiveThread extends Thread {
 
-    public static Logger logger = Logger.getLogger(ListeningThread.class.getName());
-    public ListeningThread(int port){
-        byte[] buf = new byte[1024];
-        DatagramSocket ds = new DatagramSocket(9000);
-        InetAddress loc = InetAddress.getLocalHost();
-        
+    public static Logger logger = Logger.getLogger(ReceiveThread.class.getName());
+    public ReceiveThread(String machineId,int receivePort)throws IOException{
+        byte[] receiveBuf = new byte[1024];
+        boolean receive = true;
+
+        DatagramSocket ds_receive = new DatagramSocket(receivePort);
+        DatagramPacket dp_receive = new DatagramPacket(receiveBuf, 1024);
+        logger.info("The member"+machineId+"opens port"+receivePort+"for receiving message.");
+
+        while(receive)
+        {
+            receiveBuf = dp_receive.getData();
+        }
+
+    }
+    public ReceiveThread(String machineId,int receivePort, int location)throws IOException{
+        byte[] receiveBuf = new byte[1024];
+        boolean receive = true;
+
+        DatagramSocket ds_receive = new DatagramSocket(receivePort);
+        DatagramPacket dp_receive = new DatagramPacket(receiveBuf, 1024);
+        logger.info("The member"+machineId+"opens port"+receivePort+"for receiving message.");
+
+        while(receive)
+        {
+            receiveBuf = dp_receive.getData();
+        }
 
     }
 }
