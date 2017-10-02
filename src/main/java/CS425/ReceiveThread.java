@@ -11,10 +11,11 @@ import java.io.IOException;
  *
  */
 
-public class ReceiveThread extends Thread {
+public class ReceiveThread extends Thread{
 
     public static Logger logger = Logger.getLogger(ReceiveThread.class.getName());
-    public ReceiveThread(String machineId,int receivePort)throws IOException{
+    
+    public static void ReceiveThread(String machineId,int receivePort)throws IOException{
         byte[] receiveBuf = new byte[1024];
         boolean receive = true;
 
@@ -28,18 +29,8 @@ public class ReceiveThread extends Thread {
         }
 
     }
-    public ReceiveThread(String machineId,int receivePort, int location)throws IOException{
-        byte[] receiveBuf = new byte[1024];
-        boolean receive = true;
+    public static void introReceiveThread(String machineId,int receivePort, int location)throws IOException{
 
-        DatagramSocket ds_receive = new DatagramSocket(receivePort);
-        DatagramPacket dp_receive = new DatagramPacket(receiveBuf, 1024);
-        logger.info("The member"+machineId+"opens port"+receivePort+"for receiving message.");
-
-        while(receive)
-        {
-            receiveBuf = dp_receive.getData();
-        }
 
     }
 }
