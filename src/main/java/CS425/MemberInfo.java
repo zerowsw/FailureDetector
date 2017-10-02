@@ -14,7 +14,7 @@ public class MemberInfo {
 
 
 
-    public MemberInfo(int location, String memberId,long lastActiveTime, boolean isActive)
+    public MemberInfo( String memberId,int location,long lastActiveTime, boolean isActive)
     {
         this.location = location;
         this.memberId = memberId;
@@ -54,16 +54,21 @@ public class MemberInfo {
     {
         this.lastActiveTime = lastActiveTime;
     }
-    public boolean isActive()
+
+    public String getIsActive()
     {
-        return isActive;
+        if(isActive == true)
+        {
+            return "YES";
+        }else
+        {
+            return "NO";
+        }
     }
+
     public void setActive(boolean isActive)
     {
         this.isActive = isActive;
     }
-    public void setInactive(boolean isActive)
-    {
-        this.isActive = false;
-    }
+
 }
