@@ -43,6 +43,8 @@ public class MemberGroup {
     SendThread sendThread;
     FailureDetect failureDetect;
 
+    public static boolean rejoin = false;
+
     public static boolean receiveFlag = true;
     public static boolean sendFlag = true;
     public static boolean scanFlag = true;
@@ -193,13 +195,16 @@ public class MemberGroup {
      * @throws IOException
      */
     public void joinGroup() {
-
+        receiveFlag = true;
         machineId = machineIp + " " +System.currentTimeMillis();
 
         //start the receive Thread
         logger.info("Start the listening thread");
-        receiveThread = new ReceiveThread();
-        receiveThread.start();
+
+        if (!rejoin) {
+            receiveThread = new ReceiveThread();
+            receiveThread.start();
+        }
 
         logger.info("Add the node into local membership list.");
         membershipList.put(machineId, new MemberInfo(machineIp, currentTime, true));
@@ -217,20 +222,19 @@ public class MemberGroup {
             //send UDP package to introducer
             String[] introducers = new Introducers().getIntroducers();
             singleRequest(introducers[0], "join", machineId);
-
         }
 
-        ScheduledExecutorService sendScheduler = Executors.newScheduledThreadPool(2);
-
-        //before send heartbeat, set to detect the failure regularly
-        logger.info("Start the failure detection thread.");
-        failureDetect = new FailureDetect();
-        sendScheduler.scheduleAtFixedRate(failureDetect, 0, 500, TimeUnit.SECONDS);
-
-        //set to send heartbeat regularly
-        logger.info("Start the heartbeat sending thread");
-        sendThread = new SendThread();
-        sendScheduler.scheduleAtFixedRate(sendThread, 0, 500, TimeUnit.SECONDS);
+        if (!rejoin) {
+            ScheduledExecutorService sendScheduler = Executors.newScheduledThreadPool(2);
+            //before send heartbeat, set to detect the failure regularly
+            logger.info("Start the failure detection thread.");
+            failureDetect = new FailureDetect();
+            sendScheduler.scheduleAtFixedRate(failureDetect, 0, 500, TimeUnit.SECONDS);
+            //set to send heartbeat regularly
+            logger.info("Start the heartbeat sending thread");
+            sendThread = new SendThread();
+            sendScheduler.scheduleAtFixedRate(sendThread, 0, 500, TimeUnit.SECONDS);
+        }
     }
 
     /**
@@ -283,11 +287,8 @@ public class MemberGroup {
                 logger.info("Send the leaving info to :" + member.getIp());
                 singleRequest(member.getIp(), "leave", machineId);
                 MemberGroup.membershipList.clear();
-                //MemberGroup.receiveFlag = false;
-                receiveThread.stop();
-                sendThread.stop();
-                failureDetect.stop();
-
+                MemberGroup.receiveFlag = false;
+                MemberGroup.rejoin = true;
             }
         }
     }
