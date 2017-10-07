@@ -1,11 +1,16 @@
 package CS425;
 
 
-import java.util.logging.Logger;
+
+import org.apache.log4j.Logger;
+
+import java.io.*;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.io.IOException;
+import java.net.SocketException;
+import java.util.HashMap;
+import java.util.Map;
 
 /*** This class is used to receive the message from other nodes.
  *
@@ -13,23 +18,239 @@ import java.io.IOException;
 
 public class ReceiveThread extends Thread{
 
-    public static Logger logger = Logger.getLogger(ReceiveThread.class.getName());
-    
-    public static void ReceiveThread(String machineId,int receivePort)throws IOException{
-        byte[] receiveBuf = new byte[1024];
-        boolean receive = true;
+    public static Logger logger = Logger.getLogger(ReceiveThread.class);
+    public static int port = MemberGroup.receivePort;
+    public String IP;
 
-        DatagramSocket ds_receive = new DatagramSocket(receivePort);
-        DatagramPacket dp_receive = new DatagramPacket(receiveBuf, 1024);
-        logger.info("The member"+machineId+"opens port"+receivePort+"for receiving message.");
+    public void run(){
+        byte[] receiveBuffer = new byte[2048];
+        DatagramSocket receiveSocktet;
 
-        while(receive)
-        {
-            receiveBuf = dp_receive.getData();
+        try {
+            receiveSocktet = new DatagramSocket(port);
+            DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+            receiveSocktet.receive(receivePacket);
+            //logger.info("Receive message from : " + receivePacket.getAddress());
+
+            byte[] data= receivePacket.getData();
+            ByteArrayInputStream bytestream = new ByteArrayInputStream(data);
+            ObjectInputStream objInpStream = new ObjectInputStream(bytestream);
+            Message message = (Message) objInpStream.readObject();
+
+            IP = receivePacket.getAddress().toString();
+
+            //the following operations should be completed in another thread
+            MinorOperation operation = new MinorOperation(message, receivePacket.getAddress().toString());
+            operation.start();
+
+        } catch (SocketException e) {
+            e.printStackTrace();
+            logger.error(e);
+        } catch (IOException e) {
+            e.printStackTrace();
+            logger.error(e);
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+            logger.error(e);
+        }
+    }
+
+
+    /**
+     * private inner class to deal with minoroperation
+     */
+    private class MinorOperation extends Thread{
+        Message message;
+        String sourceIP;
+        String[] introducers;
+
+        public MinorOperation(Message messageType, String sourceIP) {
+            this.message = message;
+            this.sourceIP = sourceIP;
         }
 
-    }
-    public static void introReceiveThread(String machineId,int receivePort, int location)throws IOException{
+        public void run() {
+            introducers = new Introducers().getIntroducers();
+
+            if (message.type.equals("join")) {
+                logger.info("Receive join request from : " + message.content);
+                receiveJoin((String)message.content);
+            } else if (message.type.equals("leave")) {
+                logger.info("Receive leave request form :" + message.content);
+                receiveDisseminate((String)message.content);
+            } else if (message.type.equals("heartbeat")) {
+                logger.info("Receive heartbeat from : " + IP);
+                receiveHeartbeat((String)message.content);
+            } else if (message.type.equals("disseminate")) {
+                logger.info("Receive failure dissemination of" + (String)message.content + " from " + sourceIP);
+                receiveDisseminate((String)message.content);
+            } else if (message.type.equals("updatelist")) {
+                logger.info("Receive list from" + sourceIP);
+                receiveUpdatelist(message);
+            }
+        }
+
+        /**
+         * deal with join request
+         * two situations: primary introducer receive join request from normal node
+         * or potential introducer receive rejoin request from primary introducer.
+         * @param ID
+         */
+        private void receiveJoin(String ID) {
+            String[] ids = ID.split(" ");
+            String ip = ids[0];
+            if (ip.equals(introducers[0])) {
+                //rejoin request from primary introducer
+                //disseminate the info and transform the list to primary introducer
+                logger.info("update the state of primary introducer");
+                String preId = "";
+                for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
+                    if (entry.getValue().getIp().equals(introducers[0])) {
+                        preId = entry.getKey();
+                        continue;
+                    } else if (entry.getValue().getIsActive()){
+                        String newId = introducers[0] + " " + System.currentTimeMillis();
+                        MemberGroup.singleRequest(entry.getValue().getIp(), "heartbeat", newId);
+                    }
+                }
+                MemberGroup.membershipList.remove(preId);
+                MemberGroup.membershipList.put(ID, new MemberInfo(introducers[0], System.currentTimeMillis(), true));
+
+
+                logger.info("transport the membership list to primary introducer");
+
+                sendMemberList(ip);
+
+            } else {
+                //join request from normal node to primary introducer
+                logger.info("Receive join request from normal node");
+                //if it is the rejoin of the ndde, we only need to update the state of the node
+                boolean rejoinOrNOt = false;
+                String oldId = "";
+                for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
+                    if (entry.getValue().getIp().equals(ip)) {
+                        oldId = entry.getKey();
+                        rejoinOrNOt = true;
+                        break;
+                    }
+                }
+
+                if (rejoinOrNOt) {
+                    //rejoin of node
+                    //send update to the other nodes
+                    for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
+                        if (entry.getValue().getIsActive()) {
+                            MemberGroup.singleRequest(entry.getValue().getIp(), "heartbeat", ID);
+                        }
+                    }
+
+                    //update the local list
+                    MemberGroup.membershipList.remove(oldId);
+                    MemberGroup.membershipList.put(ID, new MemberInfo(ip, System.currentTimeMillis(), true));
+
+                } else {
+                    //join of normal node
+                    for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
+                        if (entry.getValue().getIsActive()) {
+                            MemberGroup.singleRequest(entry.getValue().getIp(), "heartbeat", ID);
+                        }
+                    }
+                    MemberGroup.membershipList.put(ID, new MemberInfo(ip, System.currentTimeMillis(), true));
+                }
+
+                //send the membershiplist to the node
+                sendMemberList(ip);
+
+            }
+        }
+
+        /**
+         * send membership list to the new node.
+         * @param ip
+         */
+        private void sendMemberList(String ip) {
+            DatagramSocket socket = null;
+            try {
+                socket = new DatagramSocket();
+                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream);
+
+                HashMap<String, MemberInfo> entrys = new HashMap<String, MemberInfo>();
+                for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
+                    entrys.put(entry.getKey(), entry.getValue());
+                }
+                Message message = new Message("updatelist", entrys);
+                objectOutputStream.writeObject(message);
+
+                byte[] buffer = byteArrayOutputStream.toByteArray();
+                int length = buffer.length;
+                DatagramPacket datagramPacket = new DatagramPacket(buffer,length);
+                datagramPacket.setAddress(InetAddress.getByName(ip));
+                datagramPacket.setPort(MemberGroup.receivePort);
+                //since udp is connectless, we send more the message more than once to reduce the influence of loss
+                int count = 3;
+                while(count > 0) {
+                    socket.send(datagramPacket);
+                    count--;
+                }
+            } catch (SocketException e) {
+                e.printStackTrace();
+                logger.error(e);
+            } catch (IOException e) {
+                e.printStackTrace();
+                logger.error(e);
+            }
+        }
+
+
+        /**
+         * deal with heartbeat
+         * @param ID
+         */
+        private void receiveHeartbeat(String ID) {
+            //two types , rejoin of node or normal heartbeat
+            String[] ids = ID.split(" ");
+            if (!MemberGroup.membershipList.containsKey(ID)){
+                //rejoin of the node, or join of the new node
+                String oldid = "";
+                for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
+                   if (entry.getValue().getIp().equals(ids[0])) {
+                        oldid = entry.getKey();
+                        break;
+                    }
+                }
+
+                if (!oldid.equals("")) {
+                    MemberGroup.membershipList.remove(oldid);
+                }
+                MemberGroup.membershipList.put(ID, new MemberInfo(ids[0], System.currentTimeMillis(), true));
+            } else {
+                //update the timestamp of the node
+                MemberGroup.membershipList.get(ID).setLastActiveTime(System.currentTimeMillis());
+            }
+        }
+
+        /**
+         * deal with dissemination and leave request
+         * @param ID
+         */
+        private void receiveDisseminate(String ID) {
+            MemberGroup.membershipList.get(ID).setIsActive(false);
+        }
+
+        /**
+         * deal with updatelist request
+         * @param message
+         */
+        private void receiveUpdatelist(Message message) {
+            HashMap<String, MemberInfo> memberlist = (HashMap<String, MemberInfo>)message.content;
+            for (Map.Entry<String, MemberInfo> entry : memberlist.entrySet()) {
+                if (!MemberGroup.membershipList.contains(entry.getKey())) {
+                    MemberGroup.membershipList.put(entry.getKey(), new MemberInfo(entry.getValue().getIp(), System.currentTimeMillis(), true));
+                }
+            }
+
+        }
 
 
     }
