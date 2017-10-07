@@ -23,13 +23,15 @@ public class ReceiveThread extends Thread{
     public String IP;
 
     public void run(){
-        while (MemberGroup.receiveFlag) {
+
+
+
+        while (true) {
             byte[] receiveBuffer = new byte[2048];
-            DatagramSocket receiveSocktet;
             try {
-                receiveSocktet = new DatagramSocket(port);
+                DatagramSocket receiveSocket = new DatagramSocket(port);
                 DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
-                receiveSocktet.receive(receivePacket);
+                receiveSocket.receive(receivePacket);
                 //logger.info("Receive message from : " + receivePacket.getAddress());
 
                 byte[] data = receivePacket.getData();
@@ -39,10 +41,14 @@ public class ReceiveThread extends Thread{
 
                 IP = receivePacket.getAddress().toString();
 
+
                 //the following operations should be completed in another thread
-                MinorOperation operation = new MinorOperation(message, receivePacket.getAddress().toString());
-                operation.start();
-                receiveSocktet.close();
+                if (MemberGroup.receiveFlag) {
+                    MinorOperation operation = new MinorOperation(message, receivePacket.getAddress().toString());
+                    operation.start();
+                }
+
+                receiveSocket.close();
 
             } catch (SocketException e) {
                 e.printStackTrace();
