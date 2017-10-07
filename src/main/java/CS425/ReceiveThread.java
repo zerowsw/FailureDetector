@@ -102,23 +102,24 @@ public class ReceiveThread extends Thread{
             if (ip.equals(introducers[0])) {
                 //rejoin request from primary introducer
                 //disseminate the info and transform the list to primary introducer
-                logger.info("update the state of primary introducer");
+                logger.info("Receive rejoin request from primary introducer");
                 String preId = "";
                 for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
                     if (entry.getValue().getIp().equals(introducers[0])) {
                         preId = entry.getKey();
                         continue;
                     } else if (entry.getValue().getIsActive()){
+                        logger.info("Inform the node " + entry.getValue().getIp() + "about the rejoin of primary introducer");
                         String newId = introducers[0] + " " + System.currentTimeMillis();
                         MemberGroup.singleRequest(entry.getValue().getIp(), "heartbeat", newId);
                     }
                 }
+
+                logger.info("Update the entry of the primary introducer");
                 MemberGroup.membershipList.remove(preId);
                 MemberGroup.membershipList.put(ID, new MemberInfo(introducers[0], System.currentTimeMillis(), true));
 
-
                 logger.info("transport the membership list to primary introducer");
-
                 sendMemberList(ip);
 
             } else {
@@ -140,6 +141,7 @@ public class ReceiveThread extends Thread{
                     //send update to the other nodes
                     for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
                         if (entry.getValue().getIsActive()) {
+                            logger.info("Inform the node " + entry.getValue().getIp() + "about the rejoin of node: " + ID);
                             MemberGroup.singleRequest(entry.getValue().getIp(), "heartbeat", ID);
                         }
                     }
@@ -152,9 +154,11 @@ public class ReceiveThread extends Thread{
                     //join of normal node
                     for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
                         if (entry.getValue().getIsActive()) {
+                            logger.info("Inform the node " + entry.getValue().getIp() + "about the join of node: " + ID);
                             MemberGroup.singleRequest(entry.getValue().getIp(), "heartbeat", ID);
                         }
                     }
+                    logger.info("Udate the local alive state of node :" + ID);
                     MemberGroup.membershipList.put(ID, new MemberInfo(ip, System.currentTimeMillis(), true));
                 }
 
@@ -169,6 +173,7 @@ public class ReceiveThread extends Thread{
          * @param ip
          */
         private void sendMemberList(String ip) {
+            logger.info("Send the membership list to node :" + ip);
             DatagramSocket socket = null;
             try {
                 socket = new DatagramSocket();
@@ -212,6 +217,7 @@ public class ReceiveThread extends Thread{
             String[] ids = ID.split(" ");
             if (!MemberGroup.membershipList.containsKey(ID)){
                 //rejoin of the node, or join of the new node
+                logger.info("Update the ID of the node: " + ids[0]);
                 String oldid = "";
                 for (Map.Entry<String, MemberInfo> entry : MemberGroup.membershipList.entrySet()) {
                    if (entry.getValue().getIp().equals(ids[0])) {
@@ -219,10 +225,10 @@ public class ReceiveThread extends Thread{
                         break;
                     }
                 }
-
                 if (!oldid.equals("")) {
                     MemberGroup.membershipList.remove(oldid);
                 }
+
                 MemberGroup.membershipList.put(ID, new MemberInfo(ids[0], System.currentTimeMillis(), true));
             } else {
                 //update the timestamp of the node

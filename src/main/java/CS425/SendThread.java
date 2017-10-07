@@ -47,9 +47,12 @@ public class SendThread extends Thread {
             int newIndex = index - 1;
             newIndex = newIndex < 0 ? newIndex + size : newIndex;
             MemberGroup.singleRequest(ips.get(newIndex), "heartbeat", MemberGroup.machineId);
-            newIndex = index - 2;
-            newIndex = newIndex < 0 ? newIndex + size : newIndex;
-            MemberGroup.singleRequest(ips.get(newIndex), "heartbeat", MemberGroup.machineId);
+            int newIndex2 = index - 2;
+            newIndex2 = newIndex2 < 0 ? newIndex2 + size : newIndex2;
+            MemberGroup.singleRequest(ips.get(newIndex2), "heartbeat", MemberGroup.machineId);
+
+            logger.info("Send heartbeat to nodes: " + ips.get((index + 1) % size) + "," + ips.get((index + 2) % size) +
+                                                    "," + ips.get(newIndex) + "," + ips.get(newIndex2));
         }
     }
 

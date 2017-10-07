@@ -6,13 +6,10 @@ import org.apache.log4j.PatternLayout;
 import org.apache.log4j.RollingFileAppender;
 
 import java.io.*;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.SocketException;
+import java.net.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-import java.net.InetAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.Map.Entry;
@@ -32,7 +29,6 @@ public class MemberGroup {
     public final static int receivePort = 8088;
 
     //set the introducer's Ip and location
-    //public static String introducerIp = "192.168.1.1";
     public static int introducerLocation = 1;
 
     public static int timeout = 2000;
@@ -40,7 +36,6 @@ public class MemberGroup {
     //define some variable of machine
     public static String machineIp = "";
     public static String machineId = "";
-    public static int machineLocation;
     public static long currentTime = System.currentTimeMillis();
     //public static String machineTimestamp = String.valueOf(currentTime);
 
@@ -50,17 +45,21 @@ public class MemberGroup {
     // here we use hashmap to store the information of membership list
     public static ConcurrentHashMap<String, MemberInfo> membershipList = new ConcurrentHashMap<String, MemberInfo>();
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
 
         MemberGroup memberGroup = new MemberGroup();
 
-        machineIp = InetAddress.getLocalHost().getHostAddress().toString();
+        try {
+            machineIp = InetAddress.getLocalHost().getHostAddress().toString();
+        } catch (UnknownHostException e) {
+            logger.error(e);
+            e.printStackTrace();
+        }
         machineId = machineIp + " " + currentTime;
         // create a file to store log
         logEntry();
 
         // ask the member to choose its action
-
             System.out.println("\nYou can choose the following action: ");
             System.out.println("\nEnter 'membership' to list membership list");
             System.out.println("\nEnter 'id' to list your id ");
@@ -69,7 +68,12 @@ public class MemberGroup {
 
         while(true) {
             InputStreamReader is_reader = new InputStreamReader(System.in);
-            memberAction = new BufferedReader(is_reader).readLine();
+            try {
+                memberAction = new BufferedReader(is_reader).readLine();
+            } catch (IOException e) {
+                logger.error(e);
+                e.printStackTrace();
+            }
 
             // act accroding to member's action
             if(memberAction.equalsIgnoreCase("membership"))
@@ -88,10 +92,10 @@ public class MemberGroup {
             {
                 memberGroup.leaveGroup();
             } else {
+                System.out.println("wrong operation!  please input membership, id, join or leave!");
                 logger.info("wrong operation!  please input membership, id, join or leave!");
             }
         }
-
     }
 
     /**
@@ -111,20 +115,18 @@ public class MemberGroup {
             logger.info("CS425_MP2 log file has been created!");
             return true;
         } catch (Exception e) {
-            //logger.warning("CS425_MP2 log file cannot be created!");
             logger.error(e);
             return false;
         }
 
     }
 
-
     /**
      * This function is used to check whether the current machine is the introducer.
      * @return boolean
      * @throws IOException
      */
-    public static boolean isPrimaryIntroducer() throws IOException {
+    public static boolean isPrimaryIntroducer() {
         String[] introducers = new Introducers().getIntroducers();
         if (machineIp.equalsIgnoreCase(introducers[0])) {
             return true;
@@ -140,18 +142,18 @@ public class MemberGroup {
         DatagramSocket ds = new DatagramSocket(8088);
         DatagramPacket dp_send= new DatagramPacket(message.getBytes(),message.length(),sendAddress,sendPort);
         ds.send(dp_send);
-
     }
 
     /**
      * list membership list
      * @throws IOException
      */
-    public void listMembership() throws IOException {
+    public void listMembership() {
         String split = "\t";
 
         if(membershipList.isEmpty()){
             System.out.println("Please join the group first!");
+            logger.info("The membershiplist is empty now, please join the group first!");
             return;
         }else
         {
@@ -172,7 +174,7 @@ public class MemberGroup {
      * list member id
      * @throws IOException
      */
-    public void listMemberId() throws IOException {
+    public void listMemberId() {
         System.out.println("Your id is :"+machineId);
         logger.info("The member "+ machineId +"is viewing its id.");
     }
@@ -184,11 +186,14 @@ public class MemberGroup {
      * introducer command to potential introducers.
      * @throws IOException
      */
-    public void joinGroup() throws IOException {
+    public void joinGroup() {
 
+        //start the receive Thread
+        logger.info("Start the listening thread");
         ReceiveThread receiveThread = new ReceiveThread();
         receiveThread.start();
 
+        logger.info("Add the node into local membership list.");
         membershipList.put(machineId, new MemberInfo(machineIp, currentTime, true));
 
         // join the current machine into the distributed group membership
@@ -196,10 +201,11 @@ public class MemberGroup {
             //send join request to potential introducers
             String[] introducers = new Introducers().getIntroducers();
             for (int i = 1; i < introducers.length;  i++) {
+                logger.info("Primary introducer send join request to potential introducers: " + introducers[i]);
                 singleRequest(introducers[i], "join", machineId);
             }
         } else {
-
+            logger.info("Send the join request to primary introducer.");
             //send UDP package to introducer
             String[] introducers = new Introducers().getIntroducers();
             singleRequest(introducers[0], "join", machineId);
@@ -209,9 +215,11 @@ public class MemberGroup {
         ScheduledExecutorService sendScheduler = Executors.newScheduledThreadPool(2);
 
         //before send heartbeat, set to detect the failure regularly
-        sendScheduler.scheduleAtFixedRate(new FailureDetect(machineId), 0, 500, TimeUnit.SECONDS);
+        logger.info("Start the failure detection thread.");
+        sendScheduler.scheduleAtFixedRate(new FailureDetect(), 0, 500, TimeUnit.SECONDS);
 
         //set to send heartbeat regularly
+        logger.info("Start the heartbeat sending thread");
         sendScheduler.scheduleAtFixedRate(new SendThread(), 0, 500, TimeUnit.SECONDS);
 
     }
@@ -258,11 +266,12 @@ public class MemberGroup {
      * leave the group, inform all the other members
      * @throws IOException
      */
-    public void leaveGroup() throws IOException {
+    public void leaveGroup() {
 
         for (Entry<String, MemberInfo> entry : membershipList.entrySet()) {
             MemberInfo member = entry.getValue();
             if (member.getIsActive()) {
+                logger.info("Send the leaveing infor to " + machineId);
                 singleRequest(member.getIp(), "disseminate", machineId);
             }
         }
