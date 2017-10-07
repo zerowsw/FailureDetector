@@ -1,9 +1,11 @@
 package CS425;
 
+import java.io.Serializable;
+
 /***
  * This class is used to store information of Members in the Membership Group
  */
-public class MemberInfo {
+public class MemberInfo implements Serializable{
 
 
     private int location;

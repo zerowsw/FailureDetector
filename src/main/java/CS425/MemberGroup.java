@@ -39,8 +39,13 @@ public class MemberGroup {
     public static long currentTime = System.currentTimeMillis();
     //public static String machineTimestamp = String.valueOf(currentTime);
 
-    //define the action of member
-    public static String memberAction = "";
+    ReceiveThread receiveThread;
+    SendThread sendThread;
+    FailureDetect failureDetect;
+
+    public static boolean receiveFlag = true;
+    public static boolean sendFlag = true;
+    public static boolean scanFlag = true;
 
     // here we use hashmap to store the information of membership list
     public static ConcurrentHashMap<String, MemberInfo> membershipList = new ConcurrentHashMap<String, MemberInfo>();
@@ -68,8 +73,9 @@ public class MemberGroup {
 
         while(true) {
             InputStreamReader is_reader = new InputStreamReader(System.in);
+            String memberAction = "";
             try {
-                memberAction = new BufferedReader(is_reader).readLine();
+              memberAction = new BufferedReader(is_reader).readLine();
             } catch (IOException e) {
                 logger.error(e);
                 e.printStackTrace();
@@ -188,9 +194,11 @@ public class MemberGroup {
      */
     public void joinGroup() {
 
+        machineId = machineIp + " " +System.currentTimeMillis();
+
         //start the receive Thread
         logger.info("Start the listening thread");
-        ReceiveThread receiveThread = new ReceiveThread();
+        receiveThread = new ReceiveThread();
         receiveThread.start();
 
         logger.info("Add the node into local membership list.");
@@ -216,12 +224,13 @@ public class MemberGroup {
 
         //before send heartbeat, set to detect the failure regularly
         logger.info("Start the failure detection thread.");
-        sendScheduler.scheduleAtFixedRate(new FailureDetect(), 0, 500, TimeUnit.SECONDS);
+        failureDetect = new FailureDetect();
+        sendScheduler.scheduleAtFixedRate(failureDetect, 0, 500, TimeUnit.SECONDS);
 
         //set to send heartbeat regularly
         logger.info("Start the heartbeat sending thread");
-        sendScheduler.scheduleAtFixedRate(new SendThread(), 0, 500, TimeUnit.SECONDS);
-
+        sendThread = new SendThread();
+        sendScheduler.scheduleAtFixedRate(sendThread, 0, 500, TimeUnit.SECONDS);
     }
 
     /**
@@ -270,9 +279,15 @@ public class MemberGroup {
 
         for (Entry<String, MemberInfo> entry : membershipList.entrySet()) {
             MemberInfo member = entry.getValue();
-            if (member.getIsActive()) {
-                logger.info("Send the leaveing infor to " + machineId);
-                singleRequest(member.getIp(), "disseminate", machineId);
+            if (member.getIsActive() && !member.getIp().equals(machineIp)) {
+                logger.info("Send the leaving info to :" + member.getIp());
+                singleRequest(member.getIp(), "leave", machineId);
+                MemberGroup.membershipList.clear();
+                //MemberGroup.receiveFlag = false;
+                receiveThread.stop();
+                sendThread.stop();
+                failureDetect.stop();
+
             }
         }
     }

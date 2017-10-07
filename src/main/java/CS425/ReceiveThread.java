@@ -23,35 +23,37 @@ public class ReceiveThread extends Thread{
     public String IP;
 
     public void run(){
-        byte[] receiveBuffer = new byte[2048];
-        DatagramSocket receiveSocktet;
+        while (MemberGroup.receiveFlag) {
+            byte[] receiveBuffer = new byte[2048];
+            DatagramSocket receiveSocktet;
+            try {
+                receiveSocktet = new DatagramSocket(port);
+                DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+                receiveSocktet.receive(receivePacket);
+                //logger.info("Receive message from : " + receivePacket.getAddress());
 
-        try {
-            receiveSocktet = new DatagramSocket(port);
-            DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
-            receiveSocktet.receive(receivePacket);
-            //logger.info("Receive message from : " + receivePacket.getAddress());
+                byte[] data = receivePacket.getData();
+                ByteArrayInputStream bytestream = new ByteArrayInputStream(data);
+                ObjectInputStream objInpStream = new ObjectInputStream(bytestream);
+                Message message = (Message) objInpStream.readObject();
 
-            byte[] data= receivePacket.getData();
-            ByteArrayInputStream bytestream = new ByteArrayInputStream(data);
-            ObjectInputStream objInpStream = new ObjectInputStream(bytestream);
-            Message message = (Message) objInpStream.readObject();
+                IP = receivePacket.getAddress().toString();
 
-            IP = receivePacket.getAddress().toString();
+                //the following operations should be completed in another thread
+                MinorOperation operation = new MinorOperation(message, receivePacket.getAddress().toString());
+                operation.start();
+                receiveSocktet.close();
 
-            //the following operations should be completed in another thread
-            MinorOperation operation = new MinorOperation(message, receivePacket.getAddress().toString());
-            operation.start();
-
-        } catch (SocketException e) {
-            e.printStackTrace();
-            logger.error(e);
-        } catch (IOException e) {
-            e.printStackTrace();
-            logger.error(e);
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-            logger.error(e);
+            } catch (SocketException e) {
+                e.printStackTrace();
+                logger.error(e);
+            } catch (IOException e) {
+                e.printStackTrace();
+                logger.error(e);
+            } catch (ClassNotFoundException e) {
+                e.printStackTrace();
+                logger.error(e);
+            }
         }
     }
 
@@ -64,7 +66,7 @@ public class ReceiveThread extends Thread{
         String sourceIP;
         String[] introducers;
 
-        public MinorOperation(Message messageType, String sourceIP) {
+        public MinorOperation(Message message, String sourceIP) {
             this.message = message;
             this.sourceIP = sourceIP;
         }
