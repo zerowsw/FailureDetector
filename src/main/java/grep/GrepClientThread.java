@@ -76,7 +76,7 @@ public class GrepClientThread extends Thread {
             e.printStackTrace();
         }
 
-        saveLocalFile(out);
+        //saveLocalFile(out);
     }
 
 
