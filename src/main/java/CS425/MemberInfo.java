@@ -13,6 +13,7 @@ public class MemberInfo implements Serializable{
     private long lastActiveTime;
     private boolean isActive = true;
     private String ip;
+    private boolean scannable = false; //only when the scannable is true, monitor will check whether it is alive.
 
 
 
@@ -61,6 +62,14 @@ public class MemberInfo implements Serializable{
 
     public void setIsActive(boolean isActive) {
         this.isActive = isActive;
+    }
+
+    public boolean isScannable() {
+        return scannable;
+    }
+
+    public void setScannable(boolean scannable) {
+        this.scannable = scannable;
     }
 
 

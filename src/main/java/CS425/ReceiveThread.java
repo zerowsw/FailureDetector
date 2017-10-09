@@ -24,8 +24,6 @@ public class ReceiveThread extends Thread{
 
     public void run(){
 
-
-
         while (true) {
             byte[] receiveBuffer = new byte[2048];
             try {
@@ -116,10 +114,9 @@ public class ReceiveThread extends Thread{
                     if (entry.getValue().getIp().equals(introducers[0])) {
                         preId = entry.getKey();
                         continue;
-                    } else if (entry.getValue().getIsActive()){
+                    } else if (entry.getValue().getIsActive() && !entry.getValue().getIp().equals(MemberGroup.machineIp)){
                         logger.info("Inform the node " + entry.getValue().getIp() + "about the rejoin of primary introducer");
-                        String newId = introducers[0] + " " + System.currentTimeMillis();
-                        MemberGroup.singleRequest(entry.getValue().getIp(), "heartbeat", newId);
+                        MemberGroup.singleRequest(entry.getValue().getIp(), "heartbeat", ID);
                     }
                 }
 
@@ -238,9 +235,13 @@ public class ReceiveThread extends Thread{
                 }
 
                 MemberGroup.membershipList.put(ID, new MemberInfo(ids[0], System.currentTimeMillis(), true));
+                MemberGroup.membershipList.get(ID).setScannable(true);
             } else {
                 //update the timestamp of the node
                 MemberGroup.membershipList.get(ID).setLastActiveTime(System.currentTimeMillis());
+                MemberGroup.membershipList.get(ID).setIsActive(true);
+
+                MemberGroup.membershipList.get(ID).setScannable(true);
             }
         }
 
@@ -250,6 +251,8 @@ public class ReceiveThread extends Thread{
          */
         private void receiveDisseminate(String ID) {
             MemberGroup.membershipList.get(ID).setIsActive(false);
+            //set the scannable to false
+            MemberGroup.membershipList.get(ID).setScannable(false);
         }
 
         /**
@@ -260,7 +263,7 @@ public class ReceiveThread extends Thread{
             HashMap<String, MemberInfo> memberlist = (HashMap<String, MemberInfo>)message.content;
             for (Map.Entry<String, MemberInfo> entry : memberlist.entrySet()) {
                 if (!MemberGroup.membershipList.contains(entry.getKey())) {
-                    MemberGroup.membershipList.put(entry.getKey(), new MemberInfo(entry.getValue().getIp(), System.currentTimeMillis(), true));
+                    MemberGroup.membershipList.put(entry.getKey(), new MemberInfo(entry.getValue().getIp(), System.currentTimeMillis(), entry.getValue().getIsActive()));
                 }
             }
 

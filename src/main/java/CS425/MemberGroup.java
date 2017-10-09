@@ -1,6 +1,8 @@
 package CS425;
 
 
+import grep.GrepClient;
+import grep.GrepServer;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.RollingFileAppender;
@@ -18,21 +20,13 @@ import java.util.Map.Entry;
  * This is the entry of the project, where nodes join into the group and
  *   generate their membership lists.
  */
-
-
 public class MemberGroup {
 
     public static Logger logger = Logger.getLogger(MemberGroup.class);
 
-    // set the send port and receive port of every potential member
-    public final static int sendPort = 8080;
+    // set receive port of every potential member
     public final static int receivePort = 8088;
-
-    //set the introducer's Ip and location
-    public static int introducerLocation = 1;
-
     public static int timeout = 2000;
-
     //define some variable of machine
     public static String machineIp = "";
     public static String machineId = "";
@@ -56,6 +50,10 @@ public class MemberGroup {
 
         MemberGroup memberGroup = new MemberGroup();
 
+        //start the grep server for grep query
+        new GrepServer("8090").start();
+
+
         try {
             machineIp = InetAddress.getLocalHost().getHostAddress().toString();
         } catch (UnknownHostException e) {
@@ -71,7 +69,8 @@ public class MemberGroup {
             System.out.println("\nEnter 'membership' to list membership list");
             System.out.println("\nEnter 'id' to list your id ");
             System.out.println("\nEnter 'join' to join the group ");
-            System.out.println("\nEnter 'leave' to leave the group \n");
+            System.out.println("\nEnter 'leave' to leave the group ");
+            System.out.println("\nEnter 'grep' and queries to grep\n");
 
         while(true) {
             InputStreamReader is_reader = new InputStreamReader(System.in);
@@ -82,6 +81,8 @@ public class MemberGroup {
                 logger.error(e);
                 e.printStackTrace();
             }
+
+            String[] grepcommand = memberAction.split(" ");
 
             // act accroding to member's action
             if(memberAction.equalsIgnoreCase("membership"))
@@ -99,8 +100,12 @@ public class MemberGroup {
             else if(memberAction.equalsIgnoreCase("leave"))
             {
                 memberGroup.leaveGroup();
-            } else {
-                System.out.println("wrong operation!  please input membership, id, join or leave!");
+            } else if (grepcommand[0].equals("grep"))
+            {
+                GrepClient.grep(grepcommand);
+            }else
+            {
+                System.out.println("wrong operation!  please input membership, id, join, leave or grep command!");
                 logger.info("wrong operation!  please input membership, id, join or leave!");
             }
         }
@@ -143,15 +148,6 @@ public class MemberGroup {
         }
     }
 
-    // This function is used to send UDP package to the introducer
-    public static void greetingIntroducer(String machineId) throws IOException {
-        String message = "greeting";
-        InetAddress sendAddress=InetAddress.getLocalHost();
-        DatagramSocket ds = new DatagramSocket(8088);
-        DatagramPacket dp_send= new DatagramPacket(message.getBytes(),message.length(),sendAddress,sendPort);
-        ds.send(dp_send);
-    }
-
     /**
      * list membership list
      * @throws IOException
@@ -169,7 +165,7 @@ public class MemberGroup {
             {
                 MemberInfo list = entry.getValue();
                 System.out.println("Your membership list is as follows:\n");
-                System.out.println("MemberId      LastActiveTime   IsActive");
+                System.out.println("MemberId"+ split + split + split + "LastActiveTime   IsActive");
                 System.out.println(entry.getKey() + split + list.getActiveTime() + split + list.getIsActive());
                 logger.info("Member "+machineId+" is viewing its membership list.");
                 logger.info("The membershiplist is as follows:");
@@ -195,6 +191,7 @@ public class MemberGroup {
      * @throws IOException
      */
     public void joinGroup() {
+
         receiveFlag = true;
         machineId = machineIp + " " +System.currentTimeMillis();
 
@@ -229,11 +226,11 @@ public class MemberGroup {
             //before send heartbeat, set to detect the failure regularly
             logger.info("Start the failure detection thread.");
             failureDetect = new FailureDetect();
-            sendScheduler.scheduleAtFixedRate(failureDetect, 0, 500, TimeUnit.SECONDS);
+            sendScheduler.scheduleAtFixedRate(failureDetect, 0, 500, TimeUnit.MILLISECONDS);
             //set to send heartbeat regularly
             logger.info("Start the heartbeat sending thread");
             sendThread = new SendThread();
-            sendScheduler.scheduleAtFixedRate(sendThread, 0, 500, TimeUnit.SECONDS);
+            sendScheduler.scheduleAtFixedRate(sendThread, 0, 500, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -261,11 +258,11 @@ public class MemberGroup {
             datagramPacket.setAddress(InetAddress.getByName(ip));
             datagramPacket.setPort(receivePort);
             //since udp is connectless, we send more the message more than once to reduce the influence of loss
-            int count = 3;
-            while(count > 0) {
+//            int count = 3;
+//            while(count > 0) {
                 socket.send(datagramPacket);
-                count--;
-            }
+//                count--;
+//            }
         } catch (SocketException e) {
             e.printStackTrace();
             logger.error(e);
@@ -276,6 +273,7 @@ public class MemberGroup {
     }
 
     /**
+     *
      * leave the group, inform all the other members
      * @throws IOException
      */
@@ -286,11 +284,11 @@ public class MemberGroup {
             if (member.getIsActive() && !member.getIp().equals(machineIp)) {
                 logger.info("Send the leaving info to :" + member.getIp());
                 singleRequest(member.getIp(), "leave", machineId);
-                MemberGroup.membershipList.clear();
-                MemberGroup.receiveFlag = false;
-                MemberGroup.rejoin = true;
             }
         }
+        MemberGroup.membershipList.clear();
+        MemberGroup.receiveFlag = false;
+        MemberGroup.rejoin = true;
     }
 
 }

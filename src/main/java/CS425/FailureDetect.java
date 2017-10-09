@@ -11,10 +11,14 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class FailureDetect extends Thread {
     public static Logger logger = Logger.getLogger(FailureDetect.class);
-    public static int failTime = 2000;
-    public static long currentTime = System.currentTimeMillis();
+    public static int failTime = 3000;
+    public static long currentTime;
+    public static ArrayList<String> lastScannable = new ArrayList<String>();
 
     public void run() {
+        //System.out.println("scanning");
+        currentTime = System.currentTimeMillis();
+
         //scan the entries of those node
         ConcurrentHashMap<String, MemberInfo> list = MemberGroup.membershipList;
         ArrayList<String> ips = new ArrayList<String>();
@@ -25,6 +29,7 @@ public class FailureDetect extends Thread {
             }
         }
 
+        //System.out.println("Ips:" + ips.toString());
         //sort by ip
         Collections.sort(ips);
         int size = ips.size();
@@ -49,19 +54,35 @@ public class FailureDetect extends Thread {
             scans.add(ips.get(newIndex));
         }
 
+
+        logger.info("lastScannable:" + lastScannable.toString());
+        logger.info("scans:" + scans.toString());
+
+        //System.out.println("Scans " + scans.toString());
         for (Entry<String, MemberInfo> entry: MemberGroup.membershipList.entrySet()) {
-            if (scans.contains(entry.getValue().getIp())) {
+            if (lastScannable.contains(entry.getValue().getIp()) && !scans.contains(entry.getValue().getIp())) {
+                entry.getValue().setScannable(false);
+            }
+            //the node should be alive and scannable.
+            if (scans.contains(entry.getValue().getIp()) && entry.getValue().isScannable()) {
+                //System.out.println("has,, " + currentTime + "  " + entry.getValue().getActiveTime());
                 if (currentTime - entry.getValue().getActiveTime() > failTime) {
+                    //System.out.println("System currenttime" + currentTime + " " + entry.getValue().getActiveTime());
                     //set the state of the node false
                     entry.getValue().setIsActive(false);
-                    //disseminate the failure
-                    for (String ip : ips) {
-                        if (ip != MemberGroup.machineIp && ip != entry.getValue().getIp()) {
-                            MemberGroup.singleRequest(ip, "disseminate", entry.getKey());
+                    entry.getValue().setScannable(false);
+                    //disseminate the failure after another failTime
+                        for (String ip : ips) {
+                            if (!ip.equals(MemberGroup.machineIp) && !ip.equals(entry.getValue().getIp())) {
+                                logger.info("Send failue disseminate from" + MemberGroup.machineId + "to" + ip + "about" + entry.getValue().getIp());
+                                MemberGroup.singleRequest(ip, "disseminate", entry.getKey());
+                            }
                         }
-                    }
+
                 }
             }
         }
+        lastScannable = new ArrayList<String>(scans);
+
     }
 }
